@@ -83,6 +83,6 @@ impl QuoteStream {
             }
         }
 
-        info!("streaming closed addr:{}", addr);
+        debug!("udp streaming closed addr:{}", addr);
     }
 }

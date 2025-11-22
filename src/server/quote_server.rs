@@ -41,10 +41,19 @@ impl QuoteServer {
             match stream {
                 Ok(stream) => {
                     let peer = stream.peer_addr().unwrap();
-                    let (tx, rx) = mpsc::channel::<StockQuote>();
-                    self.subscribers.lock().unwrap().push(tx);
+                    info!(%peer, "new incoming connection");
 
-                    debug!(%peer, "new incoming connection");
+                    let (tx, rx) = mpsc::channel::<StockQuote>();
+
+                    let mut guard = self.subscribers.lock().unwrap_or_else(|poisoned| {
+                        error!("subscribers mutex poisoned in run(), recovering");
+                        poisoned.into_inner()
+                    });
+
+                    guard.push(tx);
+                    debug!("new subscriber added");
+
+                    debug!("new subscriber added");
 
                     thread::spawn(|| Self::handle_client(stream,rx));
                 }
@@ -70,7 +79,7 @@ impl QuoteServer {
 
                     if let Ok(parts) = Self::parse_request(msg) {
                         if parts[0] == CMD_STREAM {
-                            let addr = parts[1].clone();          // String
+                            let addr = parts[1].clone();
                             let tickets_raw = parts[2].clone();
 
                             debug!(addr=parts[1],tickets=tickets_raw,"stream requested");
@@ -79,20 +88,17 @@ impl QuoteServer {
                                 .map(|s| s.to_string())
                                 .collect();
 
-                            let handler = thread::spawn(move || {
+                            thread::spawn(move || {
                                 let mut qs = QuoteStream::new().unwrap();
                                 qs.stream_start(&addr,  tickets, rx)
                             });
 
-                            handler.join().unwrap();
-
-                            debug!(addr=parts[1],"stream closed");
+                            debug!(addr=parts[1],"tcp stream closed");
 
                             break // close connection
                         }
                     }
 
-                    // отправляем ответ клиенту
                     let response = "success\n";
                     stream.write_all(response.as_bytes()).unwrap();
                 }

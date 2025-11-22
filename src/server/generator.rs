@@ -7,7 +7,7 @@ use std::thread;
 use std::time::Duration;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use log::{debug, error};
+use log::{debug, warn};
 
 pub struct QuoteGenerator {
     popular_tickers: Vec<String>,
@@ -34,22 +34,35 @@ impl QuoteGenerator {
 
     pub fn start(&mut self, subscribers: Arc<Mutex<Vec<Sender<StockQuote>>>>) {
         loop {
-            for tx in subscribers.lock().unwrap().iter() {
-                let num = rand::rng().random_range(0..self.available_tickers.len());
+            if self.available_tickers.is_empty() {
+                warn!("no available tickers loaded");
+                thread::sleep(Duration::from_millis(1000));
+                continue;
+            }
 
-                if let Some(ticker) = self.available_tickers.get(num) {
-                    let ticker = ticker.clone();
+            let mut rng = rand::rng();
+            let num = rng.random_range(0..self.available_tickers.len());
 
-                    if let Some(msg) = self.generate_quote(ticker.as_ref()) {
-                        match tx.send(msg){
+            if let Some(ticker) = self.available_tickers.get(num) {
+                let ticker = ticker.clone();
+
+                if let Some(msg) = self.generate_quote(&ticker) {
+                    debug!("msg generated for {}", ticker);
+                    let mut subs = subscribers.lock().expect("failed to lock subscribers");
+                    debug!("sending quote to {} subscribers", subs.len());
+
+                    subs.retain(|tx| {
+                        match tx.send(msg.clone()) {
                             Ok(_) => {
-                                debug!("quote generated={}",ticker);
+                                debug!("quote generated={}", ticker);
+                                true
                             }
                             Err(e) => {
-                                error!("failed to send quote: {}", e);
+                                warn!("failed to send quote, delete subscriber: {}", e);
+                                false
                             }
                         }
-                    }
+                    });
                 }
             }
 
