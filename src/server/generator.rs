@@ -7,7 +7,7 @@ use std::thread;
 use std::time::Duration;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use log::info;
+use log::{debug, error};
 
 pub struct QuoteGenerator {
     popular_tickers: Vec<String>,
@@ -38,11 +38,17 @@ impl QuoteGenerator {
                 let num = rand::rng().random_range(0..self.available_tickers.len());
 
                 if let Some(ticker) = self.available_tickers.get(num) {
-                    let ticker = ticker.clone(); // делаем String
+                    let ticker = ticker.clone();
 
                     if let Some(msg) = self.generate_quote(ticker.as_ref()) {
-                        tx.send(msg).unwrap();
-                        info!("quote generated={}",ticker)
+                        match tx.send(msg){
+                            Ok(_) => {
+                                debug!("quote generated={}",ticker);
+                            }
+                            Err(e) => {
+                                error!("failed to send quote: {}", e);
+                            }
+                        }
                     }
                 }
             }

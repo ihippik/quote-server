@@ -2,6 +2,9 @@ use std::net::UdpSocket;
 use std::sync::mpsc::{Receiver};
 use crate::server::stock::StockQuote;
 use tracing::{debug, error, info};
+use std::time::{Duration, Instant};
+use std::io::ErrorKind;
+use std::sync::mpsc::TryRecvError;
 
 pub struct QuoteStream {
     socket: UdpSocket,
@@ -13,24 +16,73 @@ impl QuoteStream {
         Ok(Self { socket })
     }
 
-    pub fn stream_start(&mut self, addr: &str, tickets: Vec<String>, rx_stock: Receiver<StockQuote>) {
-        info!("streaming quotes for {}...addr:{}", tickets.join(","),addr);
+    pub fn stream_start(
+        &mut self,
+        addr: &str,
+        tickets: Vec<String>,
+        rx_stock: Receiver<StockQuote>,
+    ) {
+        info!("streaming quotes for {}...addr:{}", tickets.join(","), addr);
 
-        for msg in rx_stock {
-            if !tickets.contains(&msg.ticker) {
-                debug!(ticker = msg.ticker, "ticker not in the list of requested stocks");
-                continue;
+        let ping_timeout = Duration::from_secs(10);
+        let mut last_ping = Instant::now();
+
+        self.socket
+            .set_read_timeout(Some(Duration::from_millis(500)))
+            .unwrap();
+
+        let mut buf = [0u8; 64];
+
+        loop {
+            if last_ping.elapsed() > ping_timeout {
+                info!("ping timeout, closing stream addr:{}", addr);
+                break;
             }
 
-            match self.socket.send_to(msg.to_bytes().as_slice(), addr){
-                Ok(_) => {
-                    debug!(addr=addr,ticker=msg.ticker, "message was sent to the client");
+            match rx_stock.try_recv() {
+                Ok(msg) => {
+                    if !tickets.contains(&msg.ticker) {
+                        debug!(ticker = msg.ticker, "ticker not in the list of requested stocks");
+                    } else {
+                        match self.socket.send_to(msg.to_bytes().as_slice(), addr) {
+                            Ok(_) => {
+                                debug!(addr = addr, ticker = msg.ticker, "message was sent to the client");
+                            }
+                            Err(e) => {
+                                error!(%e, "failed to send message to the client");
+                                break;
+                            }
+                        }
+                    }
+                }
+                Err(TryRecvError::Empty) => {
+                }
+                Err(TryRecvError::Disconnected) => {
+                    info!("quotes channel closed, stopping stream addr:{}", addr);
+                    break;
+                }
+            }
+
+            match self.socket.recv_from(&mut buf) {
+                Ok((n, src)) => {
+                    let msg = &buf[..n];
+
+                    if msg == b"PING" {
+                        debug!(?src, "ping received");
+                        last_ping = Instant::now();
+                    } else {
+                        debug!(?src, msg = ?String::from_utf8_lossy(msg), "non-ping udp packet received");
+                    }
+                }
+                Err(ref e) if e.kind() == ErrorKind::WouldBlock || e.kind() == ErrorKind::TimedOut => {
                 }
                 Err(e) => {
-                    error!(%e, "failed to send message to the client");
-                    return;
+                    error!(%e, "error receiving ping on udp socket");
+                    break;
                 }
             }
         }
+
+        info!("streaming closed addr:{}", addr);
     }
 }
