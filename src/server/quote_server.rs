@@ -9,25 +9,30 @@ use crate::server::quote_stream::QuoteStream;
 use crate::server::stock::StockQuote;
 use std::sync::{Arc, Mutex};
 
+/// Errors returned when parsing incoming commands.
 #[derive(Debug)]
 enum ServerError {
     InvalidRequest,
 }
 
+/// TCP command for starting a quote stream.
 const CMD_STREAM: &str = "STREAM";
 
+/// TCP quote server that accepts subscriptions and manages subscribers.
 pub struct QuoteServer {
     listener: TcpListener,
     subscribers: Arc<Mutex<Vec<Sender<StockQuote>>>>,
 }
 
 impl QuoteServer {
+    /// Binds a new quote server to the given address.
     pub fn new(addr: &str) -> Result<Self, std::io::Error> {
         let listener = TcpListener::bind(addr)?;
         let subscribers = Arc::new(Mutex::new(Vec::new()));
         Ok(Self { listener,subscribers })
     }
 
+    /// Runs the main accept loop and starts the quote generator.
     pub fn run(&self) {
         let mut generator = QuoteGenerator::new(vec![
             "MSFT".to_string()
@@ -63,6 +68,7 @@ impl QuoteServer {
         }
     }
 
+    /// Handles a single TCP client connection.
     fn handle_client(mut stream: TcpStream, rx: Receiver<StockQuote> ) {
         let mut buffer = [0u8; 512];
 
@@ -118,6 +124,7 @@ impl QuoteServer {
         }
     }
 
+    /// Parses an incoming request line into command parts.
     fn parse_request(request: &str) -> Result<Vec<String>, ServerError> {
         let parts: Vec<String> = request.split_whitespace().map(|s| s.to_string())
             .collect();

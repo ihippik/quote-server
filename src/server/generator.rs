@@ -9,17 +9,20 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use log::{debug, warn};
 
+/// Generates random stock quotes and distributes them to subscribers.
 pub struct QuoteGenerator {
     popular_tickers: Vec<String>,
     available_tickers: Vec<String>,
 }
 
 impl QuoteGenerator {
+    /// Creates a new generator with a list of popular tickers.
     pub fn new(tickers: Vec<String>) -> Self {
         let all = vec![];
         Self { popular_tickers: tickers, available_tickers: all }
     }
 
+    /// Loads available tickers from `tickers.txt`.
     pub fn init(&mut self) {
         let file = File::open("tickers.txt").expect("failed to open tickers.txt");
         let reader = BufReader::new(file);
@@ -32,6 +35,8 @@ impl QuoteGenerator {
             .collect();
     }
 
+
+    /// Starts the quote generation loop and sends quotes to subscribers.
     pub fn start(&mut self, subscribers: Arc<Mutex<Vec<Sender<StockQuote>>>>) {
         loop {
             if self.available_tickers.is_empty() {
@@ -70,6 +75,7 @@ impl QuoteGenerator {
         }
     }
 
+    /// Generates a random quote for the given ticker.
     pub fn generate_quote(&mut self, ticker: &str) -> Option<StockQuote> {
         let last_price = random::<f64>() * 100.0;
 

@@ -7,12 +7,14 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 use tracing::{debug, error, info};
 
+/// Lightweight UDP client-side helper for receiving messages and sending pings.
 pub struct UdpServer {
     socket: UdpSocket,
     server_addr: Arc<Mutex<Option<SocketAddr>>>,
 }
 
 impl UdpServer {
+    /// Creates and binds a UDP socket on the given port.
     pub fn new(port: u16) -> std::io::Result<Self> {
         let bind_addr = format!("0.0.0.0:{port}");
         let socket = UdpSocket::bind(&bind_addr)?;
@@ -26,6 +28,8 @@ impl UdpServer {
         })
     }
 
+
+    /// Starts a background thread that periodically sends UDP `PING` packets.
     pub fn start_ping_thread(
         &self,
         stop: Arc<AtomicBool>,
@@ -71,6 +75,7 @@ impl UdpServer {
         Ok(handle)
     }
 
+    /// Runs the blocking loop receiving UDP packets until the stop flag is set.
     pub fn recv_loop(&self, stop: &AtomicBool) {
         let mut buf = [0u8; 1500];
 
