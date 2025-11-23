@@ -24,12 +24,17 @@ impl QuoteStream {
     ) {
         info!("streaming quotes for {}...addr:{}", tickets.join(","), addr);
 
+        if let Err(e) = self.socket.send_to(b"hello", addr) {
+            error!("failed to send UDP packet to {}: {}", addr, e);
+        }
+
         let ping_timeout = Duration::from_secs(10);
         let mut last_ping = Instant::now();
 
-        self.socket
-            .set_read_timeout(Some(Duration::from_millis(500)))
-            .unwrap();
+        if let Err(e) = self.socket
+            .set_read_timeout(Some(Duration::from_millis(500))){
+            error!("failed to set read timeout: {}", e);
+        }
 
         let mut buf = [0u8; 64];
 

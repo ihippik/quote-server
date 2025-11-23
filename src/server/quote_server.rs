@@ -40,8 +40,9 @@ impl QuoteServer {
         for stream in self.listener.incoming() {
             match stream {
                 Ok(stream) => {
-                    let peer = stream.peer_addr().unwrap();
-                    info!(%peer, "new incoming connection");
+                    if let Ok(peer) = stream.peer_addr() {
+                        info!(%peer, "new incoming connection");
+                    }
 
                     let (tx, rx) = mpsc::channel::<StockQuote>();
 
@@ -89,8 +90,14 @@ impl QuoteServer {
                                 .collect();
 
                             thread::spawn(move || {
-                                let mut qs = QuoteStream::new().unwrap();
-                                qs.stream_start(&addr,  tickets, rx)
+                                match QuoteStream::new() {
+                                    Ok(mut qs) => {
+                                        qs.stream_start(&addr, tickets, rx);
+                                    }
+                                    Err(e) => {
+                                        error!("failed to create QuoteStream: {}", e);
+                                    }
+                                }
                             });
 
                             debug!(addr=parts[1],"tcp stream closed");
@@ -99,8 +106,9 @@ impl QuoteServer {
                         }
                     }
 
-                    let response = "success\n";
-                    stream.write_all(response.as_bytes()).unwrap();
+                    if let Err(e) = stream.write_all("ok".as_bytes()) {
+                        error!("failed to tcp send response: {}", e);
+                    }
                 }
                 Err(e) => {
                     error!("error reading stream: {}", e);
