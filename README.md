@@ -1,4 +1,4 @@
-# 📡 quote-server
+# 📡 Quote Server
 
 A lightweight experimental project for streaming **fake stock quotes** using **TCP + UDP**.  
 Perfect for learning Rust networking, concurrency, thread synchronization, and building TCP/UDP-based protocols.
